@@ -28,7 +28,7 @@ const runAssistant = async (threadId) => {
 };
 
 const checkRunStatus = async (threadId, runId) => {
-    const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+    const runStatus = await openai.beta.threads.runs.retrieve(runId, { thread_id: threadId });
     return runStatus;
 };
 
