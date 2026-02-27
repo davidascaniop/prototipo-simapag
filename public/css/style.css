@@ -1,0 +1,28 @@
+/* Optional custom styles for the background */
+.chat-bg {
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-repeat: repeat;
+    background-size: 400px;
+    opacity: 0.9;
+}
+
+/* Custom Scrollbar to mimic whatsapp */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.2); 
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0,0,0,0.3); 
+}
+
+/* Ensure empty inputs don't look weird */
+input:focus {
+    box-shadow: none;
+}
