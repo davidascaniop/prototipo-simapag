@@ -41,16 +41,22 @@ const consultarAdeudo = async (rpu) => {
     try {
         const url = process.env.SIMAPAG_API_URL
             ? `${process.env.SIMAPAG_API_URL}/adeudos/${rpu}`
-            : `http://34.51.34.69/api/adeudos/${rpu}`;
+            : `http://34.51.34.69/api/v1/predios/${rpu}/adeudo`;
 
         const token = process.env.SIMAPAG_API_TOKEN || "100260|5UQbVNo2xyuX9jGzpH8iNXY3YNfiNaWg8rcmEMdDcf543e43";
 
-        const response = await axios.get(url, {
+        // NOTA: Es una petición POST, no GET
+        const response = await axios.post(url, {}, {
             headers: {
                 "plain-text-token": token,
                 "Authorization": `Bearer ${token}`
             }
         });
+
+        // Estructura detectada: response.data.data.attributes
+        if (response.data && response.data.data && response.data.data.attributes) {
+            return response.data.data.attributes;
+        }
         return response.data;
     } catch (error) {
         console.error(`Error al consultar adeudo para RPU ${rpu}:`, error.message);
