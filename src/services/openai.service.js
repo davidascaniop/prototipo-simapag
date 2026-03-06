@@ -39,34 +39,68 @@ const submitToolOutputs = async (threadId, runId, toolOutputs) => {
 
 const consultarAdeudo = async (rpu) => {
     try {
-        const url = process.env.SIMAPAG_API_URL
-            ? `${process.env.SIMAPAG_API_URL}/adeudos/${rpu}`
-            : `http://34.51.34.69/api/v1/predios/${rpu}/adeudo`;
-
+        const baseUrl = process.env.SIMAPAG_API_URL || 'http://34.51.34.69/api/v1';
+        const url = `${baseUrl}/predios/${rpu}/adeudo`;
         const token = process.env.SIMAPAG_API_TOKEN || "100260|5UQbVNo2xyuX9jGzpH8iNXY3YNfiNaWg8rcmEMdDcf543e43";
 
-        // NOTA: Es una petición POST, no GET
+        console.log(`[SIMAPAG] Consultando adeudo para RPU: ${rpu}`);
+        console.log(`[SIMAPAG] URL: ${url}`);
+
         const response = await axios.post(url, {}, {
             headers: {
                 "plain-text-token": token,
                 "Authorization": `Bearer ${token}`
-            }
+            },
+            timeout: 15000
         });
 
-        // Estructura detectada: response.data.data.attributes
-        if (response.data && response.data.data && response.data.data.attributes) {
-            return response.data.data.attributes;
+        const data = response.data;
+
+        // Caso de error de la API: { errors: [{ detail: "No Existe el predio" }] }
+        if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+            const apiError = data.errors[0];
+            console.warn(`[SIMAPAG] API respondió con error: ${apiError.detail}`);
+            return {
+                error: true,
+                tipo: 'rpu_no_encontrado',
+                mensaje: apiError.detail || 'RPU no encontrado',
+                rpu
+            };
         }
-        return response.data;
+
+        // Caso exitoso: { data: { attributes: { ... } } }
+        if (data.data && data.data.attributes) {
+            console.log(`[SIMAPAG] Adeudo encontrado para RPU: ${rpu}`);
+            return { ...data.data.attributes, rpu };
+        }
+
+        // Fallback: devolver data directamente
+        console.log(`[SIMAPAG] Respuesta sin estructura esperada, devolviendo raw data`);
+        return data;
     } catch (error) {
-        console.error(`Error al consultar adeudo para RPU ${rpu}:`, error.message);
-        return { error: true, mensaje: 'No se pudo consultar el adeudo en este momento', rpu };
+        console.error(`[SIMAPAG] Error de red al consultar RPU ${rpu}:`, error.message);
+        return {
+            error: true,
+            tipo: 'error_conexion',
+            mensaje: 'No se pudo conectar con el servidor de SIMAPAG',
+            rpu
+        };
     }
 };
 
 const formatAdeudo = (adeudo) => {
-    if (adeudo.error || !adeudo) {
-        return "No pude consultar tu adeudo en este momento. Por favor intenta en unos minutos.";
+    if (!adeudo || adeudo.error) {
+        // Mensaje específico según el tipo de error
+        if (adeudo?.tipo === 'rpu_no_encontrado') {
+            return `❌ El RPU *${adeudo.rpu}* no fue encontrado en el sistema.\n\n` +
+                `Por favor verifica que tu número de contrato (RPU) sea correcto. ` +
+                `Lo puedes encontrar en la parte superior de tu recibo de agua.\n\n` +
+                `Si crees que es correcto, acude a las oficinas de SIMAPAG para más ayuda.`;
+        }
+        if (adeudo?.tipo === 'error_conexion') {
+            return "⚠️ No pude conectarme con el sistema de SIMAPAG en este momento. Por favor intenta de nuevo en unos minutos.";
+        }
+        return "⚠️ No pude consultar tu adeudo en este momento. Por favor intenta en unos minutos.";
     }
 
     const monto = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(adeudo.adeudo || adeudo.monto || 0);
