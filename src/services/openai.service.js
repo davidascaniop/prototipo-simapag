@@ -41,7 +41,7 @@ const consultarAdeudo = async (rpu) => {
     try {
         const url = process.env.SIMAPAG_API_URL
             ? `${process.env.SIMAPAG_API_URL}/adeudos/${rpu}`
-            : `https://api.simapag.com.mx/adeudos/${rpu}`;
+            : `http://34.51.34.69/api/adeudos/${rpu}`;
 
         const token = process.env.SIMAPAG_API_TOKEN || "100260|5UQbVNo2xyuX9jGzpH8iNXY3YNfiNaWg8rcmEMdDcf543e43";
 
