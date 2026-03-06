@@ -22,6 +22,8 @@ const sendMessage = async (req, res) => {
 
         // Polling logic
         let runStatus = await openaiService.checkRunStatus(threadId, run.id);
+        let lastFormattedAdeudo = null;
+
         while (runStatus.status !== "completed") {
             if (runStatus.status === "failed" || runStatus.status === "cancelled" || runStatus.status === "expired") {
                 throw new Error(`Run ended with status: ${runStatus.status}`);
@@ -32,11 +34,12 @@ const sendMessage = async (req, res) => {
                 const toolOutputs = [];
 
                 for (const toolCall of toolCalls) {
-                    // Soporte para posibles nombres de la función
                     if (toolCall.function.name === "consulta_adeudo" || toolCall.function.name === "consultar_adeudo") {
                         const args = JSON.parse(toolCall.function.arguments);
                         const rpu = args.rpu || args.RPU;
                         const adeudoResult = await openaiService.consultarAdeudo(rpu);
+                        lastFormattedAdeudo = openaiService.formatAdeudo(adeudoResult);
+
                         toolOutputs.push({
                             tool_call_id: toolCall.id,
                             output: JSON.stringify(adeudoResult)
@@ -57,31 +60,36 @@ const sendMessage = async (req, res) => {
         }
 
         const messages = await openaiService.getMessages(threadId);
-
-        // The most recent assistant message will be the first one in the list (or depending on sort order)
         const assistantMessage = messages.find(m => m.role === 'assistant');
 
         if (assistantMessage && assistantMessage.content[0].type === 'text') {
             let reply = assistantMessage.content[0].text.value;
 
-            // Detectar si la respuesta contiene un JSON de despacho (como el que mostró el usuario)
-            // Buscamos algo que parezca un JSON con intencion: consulta_adeudo
+            // CASO A: El asistente usó la herramienta "consulta_adeudo" y tiene un placeholder o le falta info
+            if (lastFormattedAdeudo) {
+                // Reemplazamos el boilerplate si existe literalmente
+                if (reply.includes('[inserta información que el sistema te otorgue]')) {
+                    reply = reply.replace('[inserta información que el sistema te otorgue]', lastFormattedAdeudo);
+                }
+                // Si la respuesta es genérica o corta (como la de la captura), inyectamos el resultado
+                else if (!reply.includes('RPU:') && !reply.includes('Adeudo')) {
+                    reply = `${reply}\n\n${lastFormattedAdeudo}`;
+                }
+            }
+
+            // CASO B: El asistente devolvió directamente el JSON de despacho (Fallback)
             if (reply.includes('"intencion"') && reply.includes('"consulta_adeudo"')) {
                 try {
-                    // Extraer el JSON del texto (por si viene acompañado de texto natural)
                     const jsonMatch = reply.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
                         const dispatcher = JSON.parse(jsonMatch[0]);
-                        if (dispatcher.intencion === "consulta_adeudo" || dispatcher.intencion === "consultar_adeudo") {
-                            const rpu = dispatcher.datos?.rpu || dispatcher.rpu;
-                            if (rpu) {
-                                const adeudoResult = await openaiService.consultarAdeudo(rpu);
-                                const formattedReply = openaiService.formatAdeudo(adeudoResult);
-
-                                // Opcionalmente mantener el texto natural previo al JSON si existe
-                                const naturalPrefix = reply.split('{')[0].trim();
-                                reply = naturalPrefix ? `${naturalPrefix}\n\n${formattedReply}` : formattedReply;
-                            }
+                        const rpu = dispatcher.datos?.rpu || dispatcher.rpu;
+                        if (rpu) {
+                            const result = await openaiService.consultarAdeudo(rpu);
+                            const formatted = openaiService.formatAdeudo(result);
+                            // Mantener el prefijo si existe
+                            const naturalPrefix = reply.split('{')[0].trim();
+                            reply = naturalPrefix ? `${naturalPrefix}\n\n${formatted}` : formatted;
                         }
                     }
                 } catch (e) {
